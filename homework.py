@@ -1,11 +1,15 @@
 import logging
 import os
-import requests
 import sys
-import telegram
 import time
+from http import HTTPStatus
+
+import requests
+import telegram
 from dotenv import load_dotenv
+
 import exceptions
+import settings
 
 load_dotenv()
 
@@ -24,17 +28,6 @@ PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
-RETRY_TIME = 600
-ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
-HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
-
-
-HOMEWORK_STATUSES = {
-    'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
-    'reviewing': 'Работа взята на проверку ревьюером.',
-    'rejected': 'Работа проверена: у ревьюера есть замечания.'
-}
-
 
 def send_message(bot, message):
     """Sending a message to the Telegram chat."""
@@ -50,18 +43,25 @@ def get_api_answer(current_timestamp):
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
     try:
-        response = requests.get(ENDPOINT, headers=HEADERS, params=params)
+        response = requests.get(
+            settings.ENDPOINT,
+            headers=settings.HEADERS,
+            params=params
+        )
     except Exception as exc:
         logging.error(f'Произошла ошибка: {exc}')
-    if response.status_code == 500:
+    if response.status_code == HTTPStatus.INTERNAL_SERVER_ERROR:
         message = ('Внутренняя ошибка сервера')
         raise requests.exceptions.RequestException(message)
-    if response.status_code != 200:
+    if response.status_code != HTTPStatus.OK:
         message = (f'Произошел сбой.'
                    f'Запрос к эндпоинту вернул код {response.status_code}')
         raise requests.exceptions.RequestException(message)
-    logger.debug('Ответ получен')
-    return response.json()
+    try:
+        return response.json()
+    except ValueError:
+        logger.error('Ответ получен не в JSON-формате')
+        return {}
 
 
 def check_response(response):
@@ -91,11 +91,11 @@ def parse_status(homework):
     else:
         homework_name = homework['homework_name']
         homework_status = homework['status']
-        if homework_status not in HOMEWORK_STATUSES:
+        if homework_status not in settings.HOMEWORK_STATUSES:
             message = 'Статус домашней работы отличается от ожидаемого'
             logging.error(message)
             raise KeyError(message)
-        verdict = HOMEWORK_STATUSES[homework_status]
+        verdict = settings.HOMEWORK_STATUSES[homework_status]
         return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
@@ -104,7 +104,7 @@ def check_tokens():
     envvars = [PRACTICUM_TOKEN, TELEGRAM_CHAT_ID, TELEGRAM_TOKEN]
     for envvar in envvars:
         if envvar is None:
-            logger.critical('Отсутствует переменная окружения: {envvar}')
+            logger.critical(f'Отсутствует переменная окружения: {envvar}')
             return False
     return True
 
@@ -123,10 +123,15 @@ def main():
             else:
                 logger.debug('Статус не изменился')
             current_timestamp = current_timestamp
-            time.sleep(RETRY_TIME)
+            time.sleep(settings.RETRY_TIME)
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
             logging.error(message)
+            try:
+                send_message(bot, message)
+            except Exception:
+                not_send_message = 'Не удалось отправить сообщение об ошибке'
+                logging.error(not_send_message)
 
 
 if __name__ == '__main__':
