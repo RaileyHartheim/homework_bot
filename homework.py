@@ -114,17 +114,14 @@ def main():
     check_tokens()
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
-    cache = []
     while True:
         try:
             response = get_api_answer(current_timestamp)
             homeworks = check_response(response)
             if homeworks:
-                if parse_status(homeworks[0]) not in cache:
-                    send_message(bot, parse_status(homeworks[0]))
-                    cache.append(parse_status(homeworks[0]))
-                else:
-                    logger.debug('Статус не изменился')
+                send_message(bot, parse_status(homeworks[0]))
+            else:
+                logger.debug('Статус не изменился')
             current_timestamp = current_timestamp
             time.sleep(settings.RETRY_TIME)
         except Exception as error:
