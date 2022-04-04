@@ -123,7 +123,6 @@ def main():
             else:
                 logger.debug('Статус не изменился')
             current_timestamp = current_timestamp
-            time.sleep(settings.RETRY_TIME)
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
             logging.error(message)
@@ -132,6 +131,8 @@ def main():
             except Exception:
                 not_send_message = 'Не удалось отправить сообщение об ошибке'
                 logging.error(not_send_message)
+        finally:
+            time.sleep(settings.RETRY_TIME)
 
 
 if __name__ == '__main__':
