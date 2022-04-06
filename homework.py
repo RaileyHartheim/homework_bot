@@ -85,7 +85,6 @@ def parse_status(homework):
     """Extracting the homework status from homework info."""
     if not (('homework_name' in homework) and ('status' in homework)):
         logging.error('Отсутствуют имя и статус домашней работы')
-        print(homework)
     if homework == []:
         return {}
     else:
